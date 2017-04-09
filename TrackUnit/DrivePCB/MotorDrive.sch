@@ -32,7 +32,7 @@ LIBS:valves
 LIBS:microchip_pic12mcu
 LIBS:microchip_pic16mcu
 LIBS:MotorDrive-cache
-EELAYER 25 0
+EELAYER 26 0
 EELAYER END
 $Descr A 11000 8500
 encoding utf-8
@@ -138,7 +138,7 @@ Text Notes 8650 3900 0    68   ~ 0
 CTRL J3-1 IN4\nCTRL J3-2 IN3\nCTRL J3-3 IN2\nPWM M2\nPWM M1\nCTRL J3-4 IN1
 Text Notes 6400 3900 0    68   ~ 0
 VCC\nGND\nGND
-Text Notes 6950 5100 0    60   ~ 0
+Text Notes 6400 4900 0    60   ~ 0
 Arduino UNO Connectors
 $Comp
 L R R4
@@ -1260,9 +1260,9 @@ Wire Wire Line
 Wire Wire Line
 	8500 2300 8350 2300
 Wire Wire Line
-	8050 2300 7900 2300
+	7850 2300 8050 2300
 Wire Wire Line
-	7500 2300 7150 2300
+	7150 2300 7550 2300
 Wire Wire Line
 	7750 5450 7950 5450
 Wire Wire Line
