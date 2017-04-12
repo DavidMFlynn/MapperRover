@@ -1,8 +1,8 @@
 ;=========================================================================================
 ;
 ;   Filename:	RoverFriver.asm
-;   Date:	2/13/2016
-;   File Version:	1.0d1
+;   Date:	4/11/2017
+;   File Version:	1.0d2
 ;
 ;    Author:	David M. Flynn
 ;    Company:	Oxford V.U.E., Inc.
@@ -14,14 +14,14 @@
 ;
 ;    History:
 ;
+; 1.0d2  4/11/2017	Working on a motor test.
 ; 1.0d1  2/13/2016	First code
 ;=========================================================================================
 ; Options
 ;
 I2C_ADDRESS	EQU	0x30	; Slave default address
-SpdLimitMax	EQU	.95
-DefaultMinSpd	EQU	.20	;0..SpdLimitMax-1
-DefaultMaxSpd	EQU	.55	;0..SpdLimitMax
+DefaultMinSpd	EQU	.20	;0..DefaultMaxSpd-1
+DefaultMaxSpd	EQU	.255	;DefaultMinSpd+1..255
 DefaultFlags	EQU	b'00000000'
 ;
 ;=========================================================================================
@@ -42,6 +42,16 @@ DefaultFlags	EQU	b'00000000'
 ;    Master to Slave
 ;	Speed Left/Right SInt8
 ;
+;  Register addresses
+;   00:3F	Device  (Read Only)
+;   01:01	Revision (Read Only)
+;   02..05:	M1 Position LSB..MSB   (Read/Write)
+;   06..09:	M2 Position LSB..MSB   (Read/Write)
+;   0A:	M1 Speed  (Read/Write)
+;   0B:	M2 Speed  (Read/Write)
+;   0C:	M1 Torque (Read Only)
+;   0D:	M2 Torque (Read Only)
+;
 ;=========================================================================================
 ;
 ;   Pin 1 (RA2/AN2)		n/c
@@ -54,7 +64,7 @@ DefaultFlags	EQU	b'00000000'
 ;   Pin 8 (RB2/AN10/RX)	Right Encoder A
 ;   Pin 9 (RB3/CCP1)		Left PWM CCP1
 ;
-;   Pin 10 (RB4/AN8/SLC1)	SLC1 I2C Clock
+;   Pin 10 (RB4/AN8/SCL1)	SCL1 I2C Clock
 ;   Pin 11 (RB5/AN7) 		Right Encoder B
 ;   Pin 12 (RB6/AN5/CCP2) 	Left Encoder A
 ;   Pin 13 (RB7/AN6) 		Left Encoder B
@@ -166,9 +176,6 @@ T1CON_Val	EQU	b'00100001'	;PreScale=4,Fosc/4,Timer ON
 LEDTIME	EQU	d'100'	;1.00 seconds
 LEDErrorTime	EQU	d'10'
 ;
-;T1CON_Val	EQU	b'00000001'	;PreScale=1,Fosc/4,Timer ON
-T1CON_Val	EQU	b'00100001'	;PreScale=4,Fosc/4,Timer ON
-;
 ;================================================================================================
 ;***** VARIABLE DEFINITIONS
 ; there are 128 bytes of ram, Bank0 0x20..0x7F, Bank1 0xA0..0xBF
@@ -197,6 +204,7 @@ T1CON_Val	EQU	b'00100001'	;PreScale=4,Fosc/4,Timer ON
 	Timer3Hi		;GP wait timer
 	Timer4Lo		;4th 16 bit timer
 	Timer4Hi		; debounce timer
+	I2C_Reg
 	M1EncABPrev
 	M1EncABCur
 	M2EncABPrev
@@ -232,8 +240,8 @@ TimerI2C	EQU	Timer1Lo
 ;
 ; I2C Stuff is here
 ;Note: only upper 7 bits of address are used
-RX_ELEMENTS	EQU	.8	; number of allowable array elements, in this case 16
-TX_ELEMENTS	EQU	.10	; MotorFlagsX..CurrentPositionX+1
+RX_ELEMENTS	EQU	.14	; number of allowable array elements, in this case 16
+TX_ELEMENTS	EQU	.14	; MotorFlagsX..CurrentPositionX+1
 I2C_TX_Init_Val	EQU	0xAA	; value to load into transmit array to send to master
 I2C_RX_Init_Val	EQU	0xAB	; value to load into received data array
 ;
@@ -287,8 +295,8 @@ HasISR	EQU	0x80	;used to enable interupts 0x80=true 0x00=false
 ; EEPROM locations (NV-RAM) 0x00..0x7F (offsets)
 	ORG	0xF000
 	de	I2C_ADDRESS	;nvI2CAddr
-	de	.20	;nvMinSpd
-	de	.90	;nvMaxSpd
+	de	DefaultMinSpd	;nvMinSpd
+	de	DefaultMaxSpd	;nvMaxSpd
 ;
 	cblock	0x0000
 ;
@@ -374,11 +382,15 @@ OTH_End:
 TMR2_Done	BCF	PIR1,TMR2IF
 TMR2_End:	
 ;
-;==================================================================================
+;==============================================================================================
 ;
 	retfie		; return from interrupt
 ;
-OnTheHalf	return
+;==============================================================================================
+; Things that happen every 1/2 second go here.
+;
+OnTheHalf:
+	return
 ;
 ;==============================================================================================
 ;==============================================================================================
@@ -404,7 +416,8 @@ start	MOVLB	0x01	; select bank 1
 	movwf	WDTCON 	
 ;	
 	MOVLB	0x03	; bank 3
-	CLRF	ANSELA
+	movlw	0x03
+	movwf	ANSELA
 	CLRF	ANSELB	;Digital I/O
 ;	
 ;
