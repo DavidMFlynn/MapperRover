@@ -138,13 +138,13 @@
 	<array>
 		<dict>
 			<key>Date</key>
-			<date>2017-04-12T04:11:41Z</date>
+			<date>2017-04-12T04:59:18Z</date>
 			<key>Location</key>
 			<dict>
 				<key>BookmarkData</key>
 				<data>
-				Ym9va3QDAAAAAAQQMAAAAAAAAAAAAAAAAAAAAAAAAAAA
-				AAAAAAAAAAAAAAAAAAAAlAIAAAgAAAABAQAAUHJvamVj
+				Ym9va7ADAAAAAAQQMAAAAAAAAAAAAAAAAAAAAAAAAAAA
+				AAAAAAAAAAAAAAAAAAAAxAIAAAgAAAABAQAAUHJvamVj
 				dHMLAAAAAQEAAE1hcHBlclJvdmVyAAkAAAABAQAAVHJh
 				Y2tVbml0AAAACAAAAAEBAABGaXJtd2FyZQ8AAAABAQAA
 				Um92ZXJEcml2ZXIuYXNtABQAAAABBgAABAAAABQAAAAo
@@ -158,18 +158,20 @@
 				lAAAACQAAAABAQAAQzU5MkM1QzEtM0QxMS0zQTM3LTg0
 				Q0QtQzQ0RjI2MkI5RUY2GAAAAAECAACBAAAAAQAAAO8T
 				AAABAAAAAAAAAAAAAAABAAAAAQEAAC8AAAAAAAAAAQUA
-				AMkAAAABAgAANTIwNjVkOTY4ZDVmM2Y4YmYyNjc4YTlk
-				YTM5YWM4NTZjOTZhMTlmMjswMDAwMDAwMDswMDAwMDAw
-				MDswMDAwMDAwMDAwMDAwMDIwO2NvbS5hcHBsZS5hcHAt
-				c2FuZGJveC5yZWFkLXdyaXRlOzAwMDAwMDAxOzAxMDAw
-				MDAyOzAwMDAwMDAwMDE1NTUwNWQ7L3Byb2plY3RzL21h
-				cHBlcnJvdmVyL3RyYWNrdW5pdC9maXJtd2FyZS9yb3Zl
-				cmRyaXZlci5hc20AAAAAqAAAAP7///8BAAAAAAAAAA0A
-				AAAEEAAAZAAAAAAAAAAFEAAA0AAAAAAAAAAQEAAA/AAA
-				AAAAAABAEAAA7AAAAAAAAAACIAAArAEAAAAAAAAFIAAA
-				HAEAAAAAAAAQIAAALAEAAAAAAAARIAAAYAEAAAAAAAAS
-				IAAAQAEAAAAAAAATIAAAUAEAAAAAAAAgIAAAjAEAAAAA
-				AAAwIAAAuAEAAAAAAACA8AAAwAEAAAAAAAA=
+				ABoAAAABAQAATlNVUkxEb2N1bWVudElkZW50aWZpZXJL
+				ZXkAAAQAAAADAwAAIwgAAMkAAAABAgAANTIwNjVkOTY4
+				ZDVmM2Y4YmYyNjc4YTlkYTM5YWM4NTZjOTZhMTlmMjsw
+				MDAwMDAwMDswMDAwMDAwMDswMDAwMDAwMDAwMDAwMDIw
+				O2NvbS5hcHBsZS5hcHAtc2FuZGJveC5yZWFkLXdyaXRl
+				OzAwMDAwMDAxOzAxMDAwMDAyOzAwMDAwMDAwMDE1NTUw
+				NWQ7L3Byb2plY3RzL21hcHBlcnJvdmVyL3RyYWNrdW5p
+				dC9maXJtd2FyZS9yb3ZlcmRyaXZlci5hc20AAAAAtAAA
+				AP7///8BAAAAAAAAAA4AAAAEEAAAZAAAAAAAAAAFEAAA
+				0AAAAAAAAAAQEAAA/AAAAAAAAABAEAAA7AAAAAAAAAAC
+				IAAArAEAAAAAAAAFIAAAHAEAAAAAAAAQIAAALAEAAAAA
+				AAARIAAAYAEAAAAAAAASIAAAQAEAAAAAAAATIAAAUAEA
+				AAAAAAAgIAAAjAEAAAAAAAAwIAAAuAEAAAAAAACA8AAA
+				8AEAAAAAAADAAQCA5AEAAAAAAAA=
 				</data>
 				<key>FileURL</key>
 				<string>file:///Projects/MapperRover/TrackUnit/Firmware/RoverDriver.asm</string>
@@ -181,7 +183,7 @@
 		</dict>
 		<dict>
 			<key>Date</key>
-			<date>2017-04-12T04:11:41Z</date>
+			<date>2017-04-12T04:59:18Z</date>
 			<key>Location</key>
 			<dict>
 				<key>BookmarkData</key>
@@ -224,7 +226,7 @@
 		</dict>
 		<dict>
 			<key>Date</key>
-			<date>2017-04-12T04:11:41Z</date>
+			<date>2017-04-12T04:59:18Z</date>
 			<key>Location</key>
 			<dict>
 				<key>BookmarkData</key>
@@ -267,7 +269,7 @@
 		</dict>
 		<dict>
 			<key>Date</key>
-			<date>2017-04-12T04:11:41Z</date>
+			<date>2017-04-12T04:59:18Z</date>
 			<key>Location</key>
 			<dict>
 				<key>BookmarkData</key>
@@ -313,7 +315,7 @@
 		</dict>
 		<dict>
 			<key>Date</key>
-			<date>2017-04-12T04:11:41Z</date>
+			<date>2017-04-12T04:59:18Z</date>
 			<key>Location</key>
 			<dict>
 				<key>BookmarkData</key>
@@ -357,7 +359,7 @@
 		</dict>
 		<dict>
 			<key>Date</key>
-			<date>2017-04-12T04:11:41Z</date>
+			<date>2017-04-12T04:59:18Z</date>
 			<key>Location</key>
 			<dict>
 				<key>BookmarkData</key>
