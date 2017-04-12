@@ -125,7 +125,7 @@ DefaultFlags	EQU	b'00000000'
 	list
 ;
 ;    Port A bits
-PortADDRBits	EQU	b'01100111'
+PortADDRBits	EQU	b'11100111'
 #Define	RA0_IN	PORTA,0	;Left Motor Current AN0
 #Define	RA1_IN	PORTA,1	;Right Motor Current AN1
 #Define	RA2_IN	PORTA,2	;not used
@@ -139,7 +139,7 @@ LED1_Bit	EQU	6	;LED1 (Active Low Output)
 PortAValue	EQU	b'00000000'
 ;
 ; The only thing used on port B is I2C 1 and 2
-PortBDDRBits	EQU	b'11110111'
+PortBDDRBits	EQU	b'11111111'
 M1EncA	EQU	6
 M1EncB	EQU	7
 M2EncA	EQU	2
@@ -446,6 +446,20 @@ start	MOVLB	0x01	; select bank 1
 	movlw	PortBDDRBits	;setup for programer
 	movwf	TRISB
 ;
+;==========================
+; Setup PWM's
+;  Use timer 4 Prescale 16, PR4 0xFF
+	BANKSEL	CCP1CON
+	movlw	0x0C
+	movwf	CCP1CON
+	movwf	CCP2CON
+	movlw	0x05
+	movwf	CCPTMRS
+	BANKSEL	TMR4
+	movlw	0xFF
+	movwf	PR4
+	movlw	0x06	;post=0, tmr on,pre=16
+	movwf	T4CON
 ;
 ; clear memory to zero
 	CALL	ClearRam	;bank 0
