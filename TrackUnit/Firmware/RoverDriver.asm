@@ -448,6 +448,22 @@ start	MOVLB	0x01	; select bank 1
 	movlw	PortBDDRBits	;setup for programer
 	movwf	TRISB
 ;
+;==========================
+; Setup PWM's
+;  Use timer 4 Prescale 16, PR4 0xFF
+	BANKSEL	CCP1CON
+	movlw	0x0C
+	movwf	CCP1CON
+	movwf	CCP2CON
+	clrf	CCPR1L
+	clrf	CCPR2L
+	movlw	0x05
+	movwf	CCPTMRS
+	BANKSEL	TMR4
+	movlw	0xFF
+	movwf	PR4
+	movlw	0x06	;post=0, tmr on,pre=16
+	movwf	T4CON
 ;
 ; clear memory to zero
 	CALL	ClearRam	;bank 0
@@ -494,9 +510,24 @@ MainLoop	CLRWDT
 	CALL	I2C_DataInturp
 ;
 	CALL	I2C_DataSender
+	CALL	MotorTest
 ;
 	goto	MainLoop
 ;
+;
+;=========================================================================================
+;=========================================================================================
+;
+MotorTest	movlb	0
+	movf	Timer3Lo,F
+	SKPZ
+	return
+	movlw	.100
+	movwf	Timer3Lo
+	movlw	0x10
+	addwf	CCPR1L,F
+	addwf	CCPR2L,F
+	return
 ;
 ;=========================================================================================
 ;=========================================================================================
