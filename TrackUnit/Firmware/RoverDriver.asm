@@ -210,7 +210,7 @@ LEDErrorTime	EQU	d'10'
 	M2EncABPrev
 	M2EncABCur
 	M1Dist:4		;SInt32
-	M1CurSpeed		;100th per count
+	M1CurSpeed		;0..128 Ticks per count
 	M2Dist:4
 	M2CurSpeed
 	EncFlags
@@ -227,6 +227,8 @@ LEDErrorTime	EQU	d'10'
 ;
 ;EncFlags
 #Define	EncPhaseZero	EncFlags,0
+#Define	M1SpdUpdated	EncFlags,1
+#Define	M2SpdUpdated	EncFlags,2
 ;
 	if useI2CWDT
 TimerI2C	EQU	Timer1Lo
@@ -434,7 +436,7 @@ start	MOVLB	0x01	; select bank 1
 	MOVLW	PR2_Value
 	MOVWF	PR2
 	movlb	1	; bank 1
-	bsf	PIE1,TMR2IF
+	bsf	PIE1,TMR2IE
 ;
 ; setup data ports
 	movlb	0	; bank 0
@@ -451,7 +453,7 @@ start	MOVLB	0x01	; select bank 1
 ;==========================
 ; Setup PWM's
 ;  Use timer 4 Prescale 16, PR4 0xFF
-	BANKSEL	CCP1CON
+	BANKSEL	CCP1CON	; bank 5
 	movlw	0x0C
 	movwf	CCP1CON
 	movwf	CCP2CON
@@ -459,11 +461,13 @@ start	MOVLB	0x01	; select bank 1
 	clrf	CCPR2L
 	movlw	0x05
 	movwf	CCPTMRS
-	BANKSEL	TMR4
+	BANKSEL	TMR4	; bank 8
 	movlw	0xFF
 	movwf	PR4
 	movlw	0x06	;post=0, tmr on,pre=16
 	movwf	T4CON
+	BANKSEL	APFCON0	; bank 2
+	bsf	APFCON0,CCP2SEL	;CCP2 to RA7 (pin 16)
 ;
 ; clear memory to zero
 	CALL	ClearRam	;bank 0
@@ -506,27 +510,106 @@ MainLoop	CLRWDT
 ;
 	CALL	ReadEncorders
 ;
-	CALL	I2C_Idle
-	CALL	I2C_DataInturp
+;	CALL	I2C_Idle
+;	CALL	I2C_DataInturp
 ;
-	CALL	I2C_DataSender
-	CALL	MotorTest
+;	CALL	I2C_DataSender
+	CALL	MotorTest1
 ;
 	goto	MainLoop
 ;
 ;
 ;=========================================================================================
 ;=========================================================================================
-;
-MotorTest	movlb	0
+; test both PWM outputs
+MotorTest	movlb	0	; bank 0
 	movf	Timer3Lo,F
 	SKPZ
 	return
 	movlw	.100
 	movwf	Timer3Lo
 	movlw	0x10
+	BANKSEL	CCPR1L
 	addwf	CCPR1L,F
 	addwf	CCPR2L,F
+	movlb	0	; bank 0
+	return
+;
+;=========================================================================================
+;=========================================================================================
+; test speed control to 10 counts per 1.28 seconds
+TargetSpd	EQU	.40
+MotorTest1	movlb	0	; bank 0
+	btfsc	M1SpdUpdated
+	call	MotorTest1_M1
+	btfsc	M2SpdUpdated
+	call	MotorTest1_M2
+;
+	movf	Timer3Lo,F
+	SKPNZ
+	call	MotorTest1_M1
+	movf	Timer4Lo,F
+	SKPNZ
+	call	MotorTest1_M2
+	return
+;M1
+MotorTest1_M1	bcf	M1SpdUpdated
+	btfsc	M1CurSpeed,7
+	bra	MotorTest1_M1Slow
+;
+	movlw	TargetSpd	;speed to match
+	subwf	M1CurSpeed,W	;W=M1CurSpeed-40
+	SKPNZ
+	bra	MotorTest1_M1_End
+;less than 0 = too slow
+	btfsc	WREG,7	;Too slow?
+	bra	MotorTest1_M1Fast	; No
+MotorTest1_M1Slow	movlw	0x20
+	BANKSEL	CCPR1L
+	addwf	CCPR1L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR1L
+	bra	MotorTest1_M1_End
+;
+MotorTest1_M1Fast	movlw	0x08
+	BANKSEL	CCPR1L
+	subwf	CCPR1L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR1L
+MotorTest1_M1_End	movlb	0
+	movlw	TargetSpd	;adjust every 1/2 sec
+	movwf	Timer3Lo
+	return
+;M2
+MotorTest1_M2	bcf	M2SpdUpdated
+	btfsc	M2CurSpeed,7
+	bra	MotorTest1_M2Slow
+	movlw	TargetSpd	;speed to match
+	subwf	M2CurSpeed,W	;W=M1CurSpeed-10
+	SKPNZ
+	bra	MotorTest1_M2_End
+;less than 0 = too slow
+	btfsc	WREG,7	;Too slow?
+	bra	MotorTest1_M2Fast	; No
+MotorTest1_M2Slow	movlw	0x10
+	BANKSEL	CCPR2L
+	addwf	CCPR2L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR2L
+	bra	MotorTest1_M2_End
+;
+MotorTest1_M2Fast	movlw	0x08
+	BANKSEL	CCPR2L
+	subwf	CCPR2L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR2L
+MotorTest1_M2_End	movlb	0
+	movlw	TargetSpd	;adjust every 1/2 sec
+	movwf	Timer4Lo
 	return
 ;
 ;=========================================================================================
@@ -573,7 +656,7 @@ I2C_DataSender_L1	moviw	FSR1++
 ReadEncorders:
 	movlb	0
 ;Stalled?
-	btfsc	M1Ticks,7
+	btfsc	M1Ticks,7	;ticks sence last motion
 	bsf	M1CurSpeed,7	;Stopped or dead slow >1.27s/count
 ;
 	movf	PORTB,W
@@ -582,15 +665,17 @@ ReadEncorders:
 	movwf	M1EncABPrev
 	clrf	M1EncABCur
 	btfsc	Switches,M1EncA
-	BSF	M1EncABCur,0
+	BSF	M1EncABCur,0	;A
 	btfsc	Switches,M1EncB
-	BSF	M1EncABCur,1
-	movwf	M1EncABCur
+	BSF	M1EncABCur,1	;B
+	movf	M1EncABCur,W
 	subwf	M1EncABPrev,W	;Changed?
 	SKPNZ
-	bra	ReadEncorders_1
-	movf	M1EncABCur,W
-	movwf	M1EncABPrev
+	bra	ReadEncorders_1	; No
+	movf	M1EncABCur,W	; Yes,
+	movwf	abCurr
+	movf	M1EncABPrev,W
+	movwf	abPrev
 	movlw	low M1Dist
 	movwf	FSR0L
 	movlw	high M1Dist
@@ -599,9 +684,10 @@ ReadEncorders:
 ; Find speed
 	btfss	EncPhaseZero
 	bra	ReadEncorders_1
-	movf	M1Ticks,W
+	movf	M1Ticks,W	;ticks/count
 	clrf	M1Ticks
 	movwf	M1CurSpeed
+	bsf	M1SpdUpdated
 ;
 ReadEncorders_1:
 ;Stalled?
@@ -615,12 +701,14 @@ ReadEncorders_1:
 	BSF	M2EncABCur,0
 	btfsc	Switches,M2EncB
 	BSF	M2EncABCur,1
-	movwf	M2EncABCur
+	movf	M2EncABCur,W
 	subwf	M2EncABPrev,W	;Changed?
 	SKPNZ
 	return
 	movf	M2EncABCur,W
-	movwf	M2EncABPrev
+	movwf	abCurr
+	movf	M2EncABPrev,W
+	movwf	abPrev
 	movlw	low M2Dist
 	movwf	FSR0L
 	movlw	high M2Dist
@@ -631,9 +719,12 @@ ReadEncorders_1:
 	movf	M2Ticks,W
 	clrf	M2Ticks
 	movwf	M2CurSpeed
+	bsf	M2SpdUpdated
 ;
 ReadEncorders_2	return
 ;
+;----------------------
+;Entry: abCurr,abPrev,FSR0=distanceCounter
 QuadCount:
 	movf	abCurr,W
 	bcf	EncPhaseZero
