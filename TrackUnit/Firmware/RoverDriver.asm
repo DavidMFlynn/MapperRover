@@ -417,7 +417,7 @@ start	MOVLB	0x01	; select bank 1
 ;	
 	MOVLB	0x03	; bank 3
 	movlw	0x03
-	movwf	ANSELA
+	movwf	ANSELA	;AN0,AN1 only
 	CLRF	ANSELB	;Digital I/O
 ;	
 ;
@@ -431,11 +431,13 @@ start	MOVLB	0x01	; select bank 1
 ; Setup timer 2 for 0.01S/Interupt
 	MOVLW	T2CON_Value	;Setup T2 for 100/s
 	MOVWF	T2CON
-	BANKSEL	PR2
 	MOVLW	PR2_Value
 	MOVWF	PR2
+	movlb	1	; bank 1
+	bsf	PIE1,TMR2IF
 ;
 ; setup data ports
+	movlb	0	; bank 0
 	movlw	PortBValue
 	movwf	PORTB	;init port B
 	movlw	PortAValue
@@ -520,10 +522,10 @@ I2C_DataSender	movlb	0	; bank 0
 	movlw	high I2C_ARRAY_TX
 	movwf	FSR0H
 ;
-	movlw	low MotorFlagsX
-	movwf	FSR1L
-	movlw	high MotorFlagsX
-	movwf	FSR1H
+;	movlw	low MotorFlagsX
+;	movwf	FSR1L
+;	movlw	high MotorFlagsX
+;	movwf	FSR1H
 ;
 	movlw	0x09
 	movwf	Param78
