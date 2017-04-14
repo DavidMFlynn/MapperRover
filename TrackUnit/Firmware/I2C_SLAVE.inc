@@ -3,8 +3,8 @@
 ; I2C SLAVE DRIVER CODE
 ;
 ;    Filename:      I2C SLAVE.inc
-;    Date:          12/7/2015
-;    File Version:  1.0.7
+;    Date:          4/14/2017
+;    File Version:  1.0.8
 ;
 ;    Author:        David M. Flynn
 ;    Company:       Oxford V.U.E., Inc.
@@ -12,10 +12,11 @@
 ;    Web Site:      http://www.oxfordvue.com/
 ;
 ;=========================================================================================
-;   I2C Slave Driver Code for PIC16F1822
+;   I2C Slave Driver Code for PIC16F1847
 ;
 ;    History:
 ;
+; 1.0.8  4/14/2017	Added I2C_UseBuffData and call I2C_BufferData
 ; 1.0.7  12/7/2015	Changed slave address to ram based I2CAddr.
 ; 1.0.6  12/5/2015	Fixed some comments.
 ; 1.0.5  11/9/2015	Added watchdog to recover from wiring glitch.
@@ -41,6 +42,10 @@
 ;
 	ifndef useI2CISR
 	constant	useI2CISR=1
+	endif
+;
+	ifndef I2C_UseBuffData
+	constant	I2C_UseBuffData=0
 	endif
 ;=========================================================================================
 ;=========================================================================================
@@ -236,6 +241,9 @@ R_Add_ACK	clrf	INDEX_I2C	; clear index pointer
 ;
 	incf	INDEX_I2C,F	; increment INDEX_I2C 'pointer'
 	bsf	I2C_TXLocked	; lock data
+	if I2C_UseBuffData
+	call	I2C_BufferData
+	endif
 	return
 ;
 ;----------------

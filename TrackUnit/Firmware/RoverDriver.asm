@@ -1,8 +1,8 @@
 ;=========================================================================================
 ;
 ;   Filename:	RoverFriver.asm
-;   Date:	4/11/2017
-;   File Version:	1.0d2
+;   Date:	4/14/2017
+;   File Version:	1.0d3
 ;
 ;    Author:	David M. Flynn
 ;    Company:	Oxford V.U.E., Inc.
@@ -14,6 +14,7 @@
 ;
 ;    History:
 ;
+; 1.0d3  4/14/2017	Work on I2C protocol.
 ; 1.0d2  4/11/2017	Working on a motor test.
 ; 1.0d1  2/13/2016	First code
 ;=========================================================================================
@@ -40,16 +41,24 @@ DefaultFlags	EQU	b'00000000'
 ;	Torque Left/Right SInt8
 ;
 ;    Master to Slave
+;	Position Left/Right SInt32
 ;	Speed Left/Right SInt8
+;
+;  Reading data:
+;	I2C_addr Write RegAddress stop
+;	I2C_addr Read RegData,RegData,... stop
+;
+;  Writing data:
+;	I2C_addr Write RegAddress, RegData, RegData, ..., stop
 ;
 ;  Register addresses
 ;   00:3F	Device  (Read Only)
 ;   01:01	Revision (Read Only)
 ;   02..05:	M1 Position LSB..MSB   (Read/Write)
 ;   06..09:	M2 Position LSB..MSB   (Read/Write)
-;   0A:	M1 Speed  (Read/Write)
-;   0B:	M2 Speed  (Read/Write)
-;   0C:	M1 Torque (Read Only)
+;   0A:	M1 Speed  SInt_8, -128:Back Full, 0:Stop/Hold, 127:Full Ahead  (Read/Write)
+;   0B:	M2 Speed  Counts per second ±1:Slow, ±10:Fast (Read/Write)
+;   0C:	M1 Torque UInt_8, ADC value (Read Only)
 ;   0D:	M2 Torque (Read Only)
 ;
 ;=========================================================================================
@@ -112,11 +121,14 @@ DefaultFlags	EQU	b'00000000'
 ;
 	constant	oldCode=0
 	constant	useRS232=0
-	constant	useI2CWDT=0
+	constant	useI2CWDT=1
+	constant	I2C_UseBuffData=1
 	constant	UseEEParams=1
 ;
 #Define	_C	STATUS,C
 #Define	_Z	STATUS,Z
+I2CDevID	EQU	0x3F
+I2CDevRev	EQU	0x01
 ;
 ;
 ;====================================================================================================
@@ -153,6 +165,7 @@ M2EncB	EQU	5
 #Define	M1_EncA	PORTB,M1EncA	;Left Encoder A
 #Define	M1_EncB	PORTB,M1EncB	;Left Encoder A
 PortBValue	EQU	b'00000000'
+EncBitsMask	EQU	b'11100100'
 ;====================================================================================================
 ;====================================================================================================
 ;
@@ -204,14 +217,12 @@ LEDErrorTime	EQU	d'10'
 	Timer3Hi		;GP wait timer
 	Timer4Lo		;4th 16 bit timer
 	Timer4Hi		; debounce timer
-	I2C_Reg
+;
 	M1EncABPrev
 	M1EncABCur
 	M2EncABPrev
 	M2EncABCur
-	M1Dist:4		;SInt32
 	M1CurSpeed		;0..128 Ticks per count
-	M2Dist:4
 	M2CurSpeed
 	EncFlags
 	abCurr
@@ -242,16 +253,35 @@ TimerI2C	EQU	Timer1Lo
 ;
 ; I2C Stuff is here
 ;Note: only upper 7 bits of address are used
-RX_ELEMENTS	EQU	.14	; number of allowable array elements, in this case 16
-TX_ELEMENTS	EQU	.14	; MotorFlagsX..CurrentPositionX+1
+RX_ELEMENTS	EQU	0x10	; number of allowable array elements, in this case 16
+TX_ELEMENTS	EQU	0x10	; MotorFlagsX..CurrentPositionX+1
 I2C_TX_Init_Val	EQU	0xAA	; value to load into transmit array to send to master
 I2C_RX_Init_Val	EQU	0xAB	; value to load into received data array
+RegDataBytes	EQU	.14
 ;
 	cblock	0x120   
 	I2C_ARRAY_TX:TX_ELEMENTS	; array to transmit to master
 	I2C_ARRAY_RX:RX_ELEMENTS 	; array to receive from master
+;Register buffers
+	RegAddress		;current address 0..13
+	RegRWFlags:2		;Writable flags
+	RegData:RegDataBytes		;Buffered data
 	endc
 ;
+;Write Enable bits
+RWFlags1Def	EQU	b'11111100'	;1 = writeable
+RWFlags2Def	EQU	b'00001111'
+;
+	cblock	0x00
+	Reg_DevID
+	Reg_Rev
+	Reg_M1Pos:4
+	Reg_M2Pos:4
+	Reg_M1CmdSpeed
+	Reg_M2CmdSpeed
+	Reg_M1Torque
+	Reg_M2Torque
+	endc	
 ;
 ;=======================================================================================================
 ;  Common Ram 70-7F same for all banks
@@ -259,9 +289,9 @@ I2C_RX_Init_Val	EQU	0xAB	; value to load into received data array
 ;=======================================================================================================
 ;
 	cblock	0x70
-	Param70
-	Param71
-	Param72
+	Param70		;used by I2C
+	Param71		;used by I2C
+	Param72		;used by I2C
 	Param73
 	Param74
 	Param75
@@ -385,6 +415,39 @@ TMR2_Done	BCF	PIR1,TMR2IF
 TMR2_End:	
 ;
 ;==============================================================================================
+; I2C Com
+	MOVLB	0x00
+	btfsc	PIR1,SSP1IF 	; Is this a SSP interrupt?
+	call	I2C_ISR
+	movlb	0
+;
+;-----------------------------------------------------------------------------------------
+; I2C Bus Collision
+	btfss	PIR2,BCL1IF
+	goto	IRQ_I2C_BC_End
+;
+	banksel	SSP1BUF						
+	movf	SSP1BUF,w	; clear the SSP buffer
+	bsf	SSP1CON1,CKP	; release clock stretch
+	movlb	0x00
+	bcf	PIR2,BCL1IF	; clear the SSP interrupt flag	
+;
+IRQ_I2C_BC_End:
+;
+;==============================================================================================
+; Interrupt-on-change
+	btfss	INTCON,IOCIF
+	bra	ISR_IOC_End
+	BANKSEL	IOCBF
+; clear only the flags active now
+	movlw	0xFF
+	xorwf	IOCBF,W
+	andwf	IOCBF,F
+	movlb	0
+	CALL	ReadEncorders
+;
+ISR_IOC_End:	
+;==============================================================================================
 ;
 	retfie		; return from interrupt
 ;
@@ -451,6 +514,29 @@ start	MOVLB	0x01	; select bank 1
 	movwf	TRISB
 ;
 ;==========================
+; Setup interrupt-on-change for encoder pins
+;
+	BANKSEL	IOCBP
+	movlw	EncBitsMask
+	movwf	IOCBP	;positive edges
+	movwf	IOCBN	;negative edges
+	movlb	0
+	bsf	INTCON,IOCIE	
+;
+;==========================
+; Setup ADC
+;
+	BANKSEL	FVRCON
+	movlw	b'10000011'
+	movwf	FVRCON	;4.096V
+	BANKSEL	ADCON0
+	movlw	b'00000001'
+	movwf	ADCON0
+	movlw	b'01100011'
+	movwf	ADCON1
+	movlb	0
+;
+;==========================
 ; Setup PWM's
 ;  Use timer 4 Prescale 16, PR4 0xFF
 	BANKSEL	CCP1CON	; bank 5
@@ -495,6 +581,18 @@ start	MOVLB	0x01	; select bank 1
 	MOVLW	I2C_ADDRESS
 	movwf	I2CAddr
 ;
+; Setup default data
+	BANKSEL	RegRWFlags
+	movlw	RWFlags1Def
+	movwf	RegRWFlags
+	movlw	RWFlags2Def
+	movwf	RegRWFlags+1
+	movlw	I2CDevID
+	movwf	RegData
+	movlw	I2CDevRev
+	movwf	RegData+1
+	movlb	0
+;
 	CLRWDT
 	call	Init_I2C	;setup I2C
 ;
@@ -508,18 +606,43 @@ start	MOVLB	0x01	; select bank 1
 ;
 MainLoop	CLRWDT
 ;
-	CALL	ReadEncorders
+	call	ADC_Idle	;read motor current
 ;
-;	CALL	I2C_Idle
-;	CALL	I2C_DataInturp
+	CALL	I2C_Idle
+	CALL	I2C_DataInturp
 ;
-;	CALL	I2C_DataSender
 	CALL	MotorTest1
 ;
 	goto	MainLoop
 ;
 ;
 ;=========================================================================================
+; ADC Routine
+;=========================================================================================
+ADC_Idle:
+	BANKSEL	ADCON0	; bank 1
+	btfsc	ADCON0,GO_NOT_DONE
+	bra	ADC_End
+;
+	movlw	Reg_M1Torque
+	btfsc	ADCON0,CHS0
+	movlw	Reg_M2Torque
+	LOADFSR0W	RegData
+	movf	ADRESH,W
+	movwf	INDF0
+;
+	clrw
+	bsf	WREG,CHS0
+	xorwf	ADCON0,F
+;
+	movlw	0x10	;4uS
+	call	DelayWuS
+	bsf	ADCON0,GO_NOT_DONE
+ADC_End	movlb	0
+	return	
+;
+;=========================================================================================
+; Motor test routines
 ;=========================================================================================
 ; test both PWM outputs
 MotorTest	movlb	0	; bank 0
@@ -535,7 +658,6 @@ MotorTest	movlb	0	; bank 0
 	movlb	0	; bank 0
 	return
 ;
-;=========================================================================================
 ;=========================================================================================
 ; test speed control to 10 counts per 1.28 seconds
 TargetSpd	EQU	.40
@@ -613,6 +735,7 @@ MotorTest1_M2_End	movlb	0
 	return
 ;
 ;=========================================================================================
+; I2C Data Handlers
 ;=========================================================================================
 ;
 I2C_DataInturp	BTFSC	I2C_RXLocked	;Data is locked?
@@ -621,36 +744,109 @@ I2C_DataInturp	BTFSC	I2C_RXLocked	;Data is locked?
 	RETURN		; No
 	BCF	I2C_NewRXData
 ;
+	movf	INDEX_I2C,W	;bytes received
+	SKPNZ		;>0
+	return		; no
+	movwf	Param79	;counter
+	LOADFSR0A	I2C_ARRAY_RX
+	BANKSEL	RegAddress
+	moviw	FSR0++
+	movwf	RegAddress
+;validate address
+	movlw	RegDataBytes
+	subwf	RegAddress,W
+	SKPB		;RegDataBytes>(RegAddress)?
+	bra	I2C_DI_BadAddr	; no
+;
+	decf	Param79,F
+	SKPNZ		;Address only?
+	bra	I2C_DataInturp_End	; yes
+;
+I2C_DI_L1	call	IsWritableReg
+	btfsc	WREG,0
+	bra	I2C_DI_SkipROnly
+;
+	LOADFSR1	RegData,RegAddress
+	moviw	FSR0++
+	movwi	FSR1++
+	bra	I2C_DI_Next
+;
+I2C_DI_SkipROnly	moviw	FSR0++	;discard un-writable byte
+;
+I2C_DI_Next	call	IncRegAddress
+	decf	Param79,F
+	SKPZ		;Done?
+	bra	I2C_DI_L1
+	bra	I2C_DataInturp_End
+;
+I2C_DI_BadAddr	clrf	RegAddress
+I2C_DataInturp_End	movlb	0	
+	return
+;
+;============================
+;entry: bank = RegAddress
+;exit: 
+;Ram used: Param78, Param 7A, Param7B
+IsWritableReg	movf	RegAddress,W
+	SKPNZ
+	retlw	0	;Reg_DevID not writable
+	movwf	Param78
+	movf	RegRWFlags,W
+	movwf	Param7A	
+	movf	RegRWFlags+1,W
+	movwf	Param7B
+IsWritableReg_L1	rrf	Param7B,F
+	rrf	Param7A,F
+	decfsz	Param78,F
+	bra	IsWritableReg_L1
+	btfsc	Param7A,0
+	retlw	1	;It's writable.
+	retlw	0
+;
+;============================
+;entry: bank = RegAddress
+;Circular buffer Address = 0..RegDataBytes-1
+IncRegAddress	incf	RegAddress,F
+	movlw	RegDataBytes
+	subwf	RegAddress,W
+	SKPNZ
+	clrf	RegAddress
 	return
 ;
 ;==============================================================
 ;
-; Send all stepper data to master (9 bytes)
+; Copy current data to TX buffer
 ;
-I2C_DataSender	movlb	0	; bank 0
-	BTFSC	I2C_TXLocked	;Locked?
-	RETURN		; Yes
-;
+I2C_BufferData	movlb	0	; bank 0
 	movlw	low I2C_ARRAY_TX
 	movwf	FSR0L
 	movlw	high I2C_ARRAY_TX
 	movwf	FSR0H
 ;
-;	movlw	low MotorFlagsX
-;	movwf	FSR1L
-;	movlw	high MotorFlagsX
-;	movwf	FSR1H
+	BANKSEL	RegAddress
+	movf	RegAddress,W
+	movwf	Param79	;start w/ RegAddress and loop
+	movlb	0
 ;
-	movlw	0x09
+	movlw	RegDataBytes
 	movwf	Param78
-I2C_DataSender_L1	moviw	FSR1++
+I2C_BufferData_L1	LOADFSR1	RegData,Param79
+	moviw	FSR1++
 	movwi	FSR0++
+;inc address
+	incf	Param79,F
+	movlw	RegDataBytes
+	subwf	Param79,W
+	SKPNZ
+	clrf	Param79
+;
 	decfsz	Param78,F
-	goto	I2C_DataSender_L1
+	goto	I2C_BufferData_L1
 ;
 	RETURN
 ;
 ;=========================================================================================
+; Read the encoders and update Reg_MxPos
 ;=========================================================================================
 ;
 ReadEncorders:
@@ -676,9 +872,9 @@ ReadEncorders:
 	movwf	abCurr
 	movf	M1EncABPrev,W
 	movwf	abPrev
-	movlw	low M1Dist
+	movlw	low Reg_M1Pos
 	movwf	FSR0L
-	movlw	high M1Dist
+	movlw	high Reg_M1Pos
 	movwf	FSR0H
 	call	QuadCount
 ; Find speed
@@ -709,9 +905,9 @@ ReadEncorders_1:
 	movwf	abCurr
 	movf	M2EncABPrev,W
 	movwf	abPrev
-	movlw	low M2Dist
+	movlw	low Reg_M2Pos
 	movwf	FSR0L
-	movlw	high M2Dist
+	movlw	high Reg_M2Pos
 	movwf	FSR0H
 	call	QuadCount
 	btfss	EncPhaseZero
@@ -764,7 +960,7 @@ Q_Enc20:
 Q_Enc13:		
 Q_Enc01:	
 Q_Enc32	movlw	0x01
-	subwf	INDF0,F	;M1Dist
+	subwf	INDF0,F	;Reg_MxPos
 	clrw
 	incf	FSR0,F
 	subwfb	INDF0,F
@@ -787,6 +983,9 @@ Q_Enc31	movlw	0x01
 	addwfc	INDF0,F	
 	return
 ;
+;=========================================================================================
+;
+;=========================================================================================
 ;
 	END
 ;
