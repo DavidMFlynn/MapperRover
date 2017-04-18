@@ -21,8 +21,10 @@
 ; Options
 ;
 I2C_ADDRESS	EQU	0x30	; Slave default address
-DefaultMinSpd	EQU	.20	;0..DefaultMaxSpd-1
-DefaultMaxSpd	EQU	.255	;DefaultMinSpd+1..255
+DefaultMinSpd	EQU	.4	;0..DefaultMaxSpd-1
+DefaultMaxSpd	EQU	.20	;DefaultMinSpd+1..255
+kBaseTimeUnit          EQU                    .10                    ;1/10th second
+kBTUPerA               EQU                    .4
 DefaultFlags	EQU	b'00000000'
 ;
 ;=========================================================================================
@@ -210,13 +212,13 @@ LEDErrorTime	EQU	d'10'
 	EEDataTemp		;Data to be writen to EEProm
 ;
 	Timer1Lo		;1st 16 bit timer
-	Timer1Hi		; one second RX timeiout
+	Timer1Hi		; one second I2C RX timeiout
 	Timer2Lo		;2nd 16 bit timer
-	Timer2Hi		;
+	Timer2Hi		; speed and motion BTU
 	Timer3Lo		;3rd 16 bit timer
-	Timer3Hi		;GP wait timer
+	Timer3Hi		; GP wait timer
 	Timer4Lo		;4th 16 bit timer
-	Timer4Hi		; debounce timer
+	Timer4Hi		; GP wait timer two
 ;
 	M1EncABPrev
 	M1EncABCur
