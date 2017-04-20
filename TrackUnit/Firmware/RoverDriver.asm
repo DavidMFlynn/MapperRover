@@ -24,7 +24,8 @@ I2C_ADDRESS	EQU	0x30	; Slave default address
 DefaultMinSpd	EQU	.4	;0..DefaultMaxSpd-1
 DefaultMaxSpd	EQU	.20	;DefaultMinSpd+1..255
 kBaseTimeUnit          EQU                    .10                    ;1/10th second
-kBTUPerA               EQU                    .4
+kBTUPerA               EQU                    .4                     ;Running Average Time
+kBTUPerAMask           EQU                    b'00000011'
 DefaultFlags	EQU	b'00000000'
 ;
 ;=========================================================================================
@@ -230,18 +231,25 @@ LEDErrorTime	EQU	d'10'
 	abCurr
 	abPrev
 	Switches
+	M1AvSpd
+	M2AvSpd
 ;
 	SysFlags
 	I2CAddr
 	MinSpd
 	MaxSpd
 ;
+                       Semiphores
+                       SpeedIndex
 	endc
 ;
 ;EncFlags
 #Define	EncPhaseZero	EncFlags,0
 #Define	M1SpdUpdated	EncFlags,1
 #Define	M2SpdUpdated	EncFlags,2
+;
+;Semiphores
+#Define                PositionIsLocked       Semiphores,0
 ;
 	if useI2CWDT
 TimerI2C	EQU	Timer1Lo
@@ -283,6 +291,14 @@ RWFlags2Def	EQU	b'00001111'
 	Reg_M2CmdSpeed
 	Reg_M1Torque
 	Reg_M2Torque
+	PosM1T0
+	PosM1T1
+	PosM1T2
+	PosM1T3
+	PosM2T0
+	PosM2T1
+	PosM2T2
+	PosM2T3
 	endc	
 ;
 ;=======================================================================================================
@@ -607,7 +623,15 @@ start	MOVLB	0x01	; select bank 1
 ;  Main Loop
 ;
 MainLoop	CLRWDT
+;Motion Tracking
+                       movf                   Timer2Lo,W
+                       SKPZ
+                       bra                    MainLoop_1
+                       movlw                  kBaseTimeUnit
+                       movwf                  Timer2Lo
+                       call                   CalcSpeed
 ;
+MainLoop_1:
 	call	ADC_Idle	;read motor current
 ;
 	CALL	I2C_Idle
@@ -618,6 +642,37 @@ MainLoop	CLRWDT
 	goto	MainLoop
 ;
 ;
+;=========================================================================================
+; Calculate Speed
+;  Integrate Position
+;=========================================================================================
+CalcSpeed              movf                   SpeedIndex,W
+                       LOADFSR0W              PosM1T0                ;old position
+                       LOADFSR1A              Reg_M1Pos              ;current
+                       bsf                    PositionIsLocked
+                       movf                   INDF1,W
+                       subwf                  INDF0,W                ;W=new-old
+                       movwf                  M1AvSpd
+                       movf                   INDF1,W
+                       movwf                  INDF0
+;
+                       movf                   SpeedIndex,W
+                       LOADFSR0W              PosM2T0                ;old position
+                       LOADFSR1A              Reg_M2Pos              ;current
+                       movf                   INDF1,W
+                       subwf                  INDF0,W                ;W=new-old
+                       movwf                  M2AvSpd
+                       movf                   INDF1,W
+                       movwf                  INDF0
+;
+                       bcf                    PositionIsLocked
+;
+;Next
+                       incf                   SpeedIndex,F
+                       movlw                  kBTUPerAMask
+                       andwf                  SpeedIndex,F
+;
+                       return
 ;=========================================================================================
 ; ADC Routine
 ;=========================================================================================
@@ -961,7 +1016,9 @@ Q_Enc2	movf	abPrev,W
 Q_Enc20:
 Q_Enc13:		
 Q_Enc01:	
-Q_Enc32	movlw	0x01
+Q_Enc32	btfsc                  PositionIsLocked
+                       bra                    $-1
+                       movlw	0x01
 	subwf	INDF0,F	;Reg_MxPos
 	clrw
 	incf	FSR0,F
@@ -974,7 +1031,9 @@ Q_Enc32	movlw	0x01
 Q_Enc23:
 Q_Enc10:
 Q_Enc02:
-Q_Enc31	movlw	0x01
+Q_Enc31	btfsc                  PositionIsLocked
+                       bra                    $-1
+                       movlw	0x01
 	addwf	INDF0,F
 	clrw
 	incf	FSR0,F
