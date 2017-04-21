@@ -1,5 +1,5 @@
 ;=========================================================================================
-;test push
+;
 ;   Filename:	RoverFriver.asm
 ;   Date:	4/14/2017
 ;   File Version:	1.0d3
@@ -25,6 +25,7 @@ DefaultMinSpd	EQU	.4	;0..DefaultMaxSpd-1
 DefaultMaxSpd	EQU	.20	;DefaultMinSpd+1..255
 kBaseTimeUnit          EQU                    .10                    ;1/10th second
 kBTUPerA               EQU                    .4                     ;Running Average Time
+kGain	EQU	.3	;1..12
 kBTUPerAMask           EQU                    b'00000011'
 DefaultFlags	EQU	b'00000000'
 ;
@@ -630,6 +631,7 @@ MainLoop	CLRWDT
                        movlw                  kBaseTimeUnit
                        movwf                  Timer2Lo
                        call                   CalcSpeed
+                       call	MotorTest1
 ;
 MainLoop_1:
 	call	ADC_Idle	;read motor current
@@ -637,7 +639,6 @@ MainLoop_1:
 	CALL	I2C_Idle
 	CALL	I2C_DataInturp
 ;
-	CALL	MotorTest1
 ;
 	goto	MainLoop
 ;
@@ -645,6 +646,8 @@ MainLoop_1:
 ;=========================================================================================
 ; Calculate Speed
 ;  Integrate Position
+; Entry: Bank0
+; Exit: M1AvSpd,M2AvSpd,SpeedIndex++
 ;=========================================================================================
 CalcSpeed              movf                   SpeedIndex,W
                        LOADFSR0W              PosM1T0                ;old position
@@ -701,6 +704,7 @@ ADC_End	movlb	0
 ;=========================================================================================
 ; Motor test routines
 ;=========================================================================================
+	if oldCode
 ; test both PWM outputs
 MotorTest	movlb	0	; bank 0
 	movf	Timer3Lo,F
@@ -790,6 +794,92 @@ MotorTest1_M2_End	movlb	0
 	movlw	TargetSpd	;adjust every 1/2 sec
 	movwf	Timer4Lo
 	return
+;
+	endif
+;
+;=========================================================================================
+; Entry: M1AvSpd, M2AvSpd
+;
+TargetSpd	EQU	.8
+;
+MotorTest1	movlb	0	; bank 0
+;
+	call	MotorTest1_M1
+	call	MotorTest1_M2
+	return
+;M1
+MotorTest1_M1	movlw	TargetSpd	;speed to match
+	movwf	Param78
+	movf	M1AvSpd,W
+	subwf	Param78,F	;Param78=TargetSpd-M1AvSpd
+	SKPNZ
+	return
+	clrf	Param79
+	movlw	kGain
+	movwf	Param7A
+;
+MotorTest1_M1_L1	movf	Param78,W
+	addwf	Param79,F
+	decfsz	Param7A,F
+	bra	MotorTest1_M1_L1
+;
+;Param78=Error, less than 0 = too fast
+	btfsc	Param78,7	;Too slow?
+	bra	MotorTest1_M1Fast	; No
+;MotorTest1_M1Slow
+	BANKSEL	CCPR1L
+	movf	Param79,W
+	addwf	CCPR1L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR1L
+	bra	MotorTest1_End
+;
+MotorTest1_M1Fast:
+	BANKSEL	CCPR1L
+	movf	Param79,W
+	addwf	CCPR1L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR1L
+MotorTest1_End	movlb	0
+	return
+;M2
+MotorTest1_M2	movlw	TargetSpd	;speed to match
+	movwf	Param78
+	movf	M2AvSpd,W
+	subwf	Param78,F	;Param78=TargetSpd-M2AvSpd
+	SKPNZ
+	return
+	clrf	Param79
+	movlw	kGain
+	movwf	Param7A
+;
+MotorTest1_M2_L1	movf	Param78,W
+	addwf	Param79,F
+	decfsz	Param7A,F
+	bra	MotorTest1_M2_L1
+;
+;Param78=Error, less than 0 = too fast
+	btfsc	Param78,7	;Too slow?
+	bra	MotorTest1_M2Fast	; No
+;MotorTest1_M2Slow
+	BANKSEL	CCPR1L
+	movf	Param79,W
+	addwf	CCPR1L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR1L
+	bra	MotorTest1_End
+;
+MotorTest1_M2Fast:
+	BANKSEL	CCPR1L
+	movf	Param79,W
+	addwf	CCPR1L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR1L
+	bra	MotorTest1_End
 ;
 ;=========================================================================================
 ; I2C Data Handlers
