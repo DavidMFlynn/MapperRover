@@ -25,7 +25,7 @@ DefaultMinSpd	EQU	.4	;0..DefaultMaxSpd-1
 DefaultMaxSpd	EQU	.20	;DefaultMinSpd+1..255
 kBaseTimeUnit          EQU                    .10                    ;1/10th second
 kBTUPerA               EQU                    .4                     ;Running Average Time
-kGain	EQU	.3	;1..12
+kGain	EQU	.4	;1..12
 kBTUPerAMask           EQU                    b'00000011'
 DefaultFlags	EQU	b'00000000'
 ;
@@ -226,8 +226,8 @@ LEDErrorTime	EQU	d'10'
 	M1EncABCur
 	M2EncABPrev
 	M2EncABCur
-	M1CurSpeed		;0..128 Ticks per count
-	M2CurSpeed
+;	M1CurSpeed		;0..128 Ticks per count
+;	M2CurSpeed
 	EncFlags
 	abCurr
 	abPrev
@@ -277,21 +277,6 @@ RegDataBytes	EQU	.14
 	RegAddress		;current address 0..13
 	RegRWFlags:2		;Writable flags
 	RegData:RegDataBytes		;Buffered data
-	endc
-;
-;Write Enable bits
-RWFlags1Def	EQU	b'11111100'	;1 = writeable
-RWFlags2Def	EQU	b'00001111'
-;
-	cblock	0x00
-	Reg_DevID
-	Reg_Rev
-	Reg_M1Pos:4
-	Reg_M2Pos:4
-	Reg_M1CmdSpeed
-	Reg_M2CmdSpeed
-	Reg_M1Torque
-	Reg_M2Torque
 	PosM1T0
 	PosM1T1
 	PosM1T2
@@ -300,6 +285,22 @@ RWFlags2Def	EQU	b'00001111'
 	PosM2T1
 	PosM2T2
 	PosM2T3
+	endc
+;
+;Write Enable bits
+RWFlags1Def	EQU	b'11111100'	;1 = writeable
+RWFlags2Def	EQU	b'00001111'
+;
+;RegData:RegDataBytes Offsets
+	cblock                 0x00
+	Reg_DevID
+	Reg_Rev
+	Reg_M1Pos:4
+	Reg_M2Pos:4
+	Reg_M1CmdSpeed
+	Reg_M2CmdSpeed
+	Reg_M1Torque
+	Reg_M2Torque
 	endc	
 ;
 ;=======================================================================================================
@@ -393,10 +394,10 @@ HasISR	EQU	0x80	;used to enable interupts 0x80=true 0x00=false
 	call	DecTimer3
 	call	DecTimer4
 ;
-	btfss	M1Ticks,7
-	incf	M1Ticks,F
-	btfss	M2Ticks,7
-	incf	M2Ticks,F
+;	btfss	M1Ticks,7
+;	incf	M1Ticks,F
+;	btfss	M2Ticks,7
+;	incf	M2Ticks,F
 ;--------------------------------------------------------------------
 	movlb	0
 	movf	OnTheHalfCount,F
@@ -494,7 +495,7 @@ start	MOVLB	0x01	; select bank 1
 	bsf	OPTION_REG,PS1	;101 8mhz/4/64=31250hz=32uS/Ct=0.008192S/ISR
 	bsf	OPTION_REG,PS2
 ;
-	MOVLW	OSCCON_Value
+	movlw	OSCCON_Value
 	MOVWF	OSCCON
 	movlw	b'00010111'	; WDT prescaler 1:65536 period is 2 sec (RESET value)
 	movwf	WDTCON 	
@@ -508,14 +509,14 @@ start	MOVLB	0x01	; select bank 1
 ; setup timer 1 for 0.5uS/count
 ;
 	movlb	0	; bank 0
-	MOVLW	T1CON_Val
+	movlw	T1CON_Val
 	MOVWF	T1CON
 	bcf	T1GCON,TMR1GE	;always count
 ;
 ; Setup timer 2 for 0.01S/Interupt
-	MOVLW	T2CON_Value	;Setup T2 for 100/s
+	movlw	T2CON_Value	;Setup T2 for 100/s
 	MOVWF	T2CON
-	MOVLW	PR2_Value
+	movlw	PR2_Value
 	MOVWF	PR2
 	movlb	1	; bank 1
 	bsf	PIE1,TMR2IE
@@ -569,7 +570,7 @@ start	MOVLB	0x01	; select bank 1
 	BANKSEL	TMR4	; bank 8
 	movlw	0xFF
 	movwf	PR4
-	movlw	0x06	;post=0, tmr on,pre=16
+	movlw	b'00000101'	;post=0, tmr on,pre=4
 	movwf	T4CON
 	BANKSEL	APFCON0	; bank 2
 	bsf	APFCON0,CCP2SEL	;CCP2 to RA7 (pin 16)
@@ -580,10 +581,10 @@ start	MOVLB	0x01	; select bank 1
 ;
 	CLRWDT
 ;
-	MOVLW	LEDTIME
+	movlw	LEDTIME
 	MOVWF	LED_Time
 ;
-	MOVLW	0x01
+	movlw	0x01
 	MOVWF	LED_Count
 ;
 ;
@@ -594,10 +595,10 @@ start	MOVLB	0x01	; select bank 1
 ; test for a bad I2C address
 	movf	I2CAddr,W
 	btfsc	WREG,0	;LSb most be clr
-	MOVLW	I2C_ADDRESS
+	movlw	I2C_ADDRESS
 	movf	WREG,F
 	SKPNZ
-	MOVLW	I2C_ADDRESS
+	movlw	I2C_ADDRESS
 	movwf	I2CAddr
 ;
 ; Setup default data
@@ -611,6 +612,9 @@ start	MOVLB	0x01	; select bank 1
 	movlw	I2CDevRev
 	movwf	RegData+1
 	movlb	0
+	movlw                  .5                     ;tc
+                       movwf                  M1AvSpd
+                       movwf                  M2AvSpd
 ;
 	CLRWDT
 	call	Init_I2C	;setup I2C
@@ -649,21 +653,22 @@ MainLoop_1:
 ; Entry: Bank0
 ; Exit: M1AvSpd,M2AvSpd,SpeedIndex++
 ;=========================================================================================
-CalcSpeed              movf                   SpeedIndex,W
-                       LOADFSR0W              PosM1T0                ;old position
-                       LOADFSR1A              Reg_M1Pos              ;current
+CalcSpeed:
+                       LOADFSR0               PosM1T0,SpeedIndex     ;old position
+                       movlw                  Reg_M1Pos
+                       LOADFSR1W              RegData              ;current
                        bsf                    PositionIsLocked
-                       movf                   INDF1,W
-                       subwf                  INDF0,W                ;W=new-old
+                       movf                   INDF0,W                ;W=old
+                       subwf                  INDF1,W                ;W=new-W
                        movwf                  M1AvSpd
                        movf                   INDF1,W
                        movwf                  INDF0
 ;
-                       movf                   SpeedIndex,W
-                       LOADFSR0W              PosM2T0                ;old position
-                       LOADFSR1A              Reg_M2Pos              ;current
-                       movf                   INDF1,W
-                       subwf                  INDF0,W                ;W=new-old
+                       LOADFSR0               PosM2T0,SpeedIndex     ;old position
+                       movlw                  Reg_M2Pos
+                       LOADFSR1W              RegData              ;current
+                       movf                   INDF0,W
+                       subwf                  INDF1,W                ;W=new-old
                        movwf                  M2AvSpd
                        movf                   INDF1,W
                        movwf                  INDF0
@@ -704,103 +709,9 @@ ADC_End	movlb	0
 ;=========================================================================================
 ; Motor test routines
 ;=========================================================================================
-	if oldCode
-; test both PWM outputs
-MotorTest	movlb	0	; bank 0
-	movf	Timer3Lo,F
-	SKPZ
-	return
-	movlw	.100
-	movwf	Timer3Lo
-	movlw	0x10
-	BANKSEL	CCPR1L
-	addwf	CCPR1L,F
-	addwf	CCPR2L,F
-	movlb	0	; bank 0
-	return
-;
-;=========================================================================================
-; test speed control to 10 counts per 1.28 seconds
-TargetSpd	EQU	.40
-MotorTest1	movlb	0	; bank 0
-	btfsc	M1SpdUpdated
-	call	MotorTest1_M1
-	btfsc	M2SpdUpdated
-	call	MotorTest1_M2
-;
-	movf	Timer3Lo,F
-	SKPNZ
-	call	MotorTest1_M1
-	movf	Timer4Lo,F
-	SKPNZ
-	call	MotorTest1_M2
-	return
-;M1
-MotorTest1_M1	bcf	M1SpdUpdated
-	btfsc	M1CurSpeed,7
-	bra	MotorTest1_M1Slow
-;
-	movlw	TargetSpd	;speed to match
-	subwf	M1CurSpeed,W	;W=M1CurSpeed-40
-	SKPNZ
-	bra	MotorTest1_M1_End
-;less than 0 = too slow
-	btfsc	WREG,7	;Too slow?
-	bra	MotorTest1_M1Fast	; No
-MotorTest1_M1Slow	movlw	0x20
-	BANKSEL	CCPR1L
-	addwf	CCPR1L,W
-	btfsc	_C
-	movlw	0xFF	;Max speed
-	movwf	CCPR1L
-	bra	MotorTest1_M1_End
-;
-MotorTest1_M1Fast	movlw	0x08
-	BANKSEL	CCPR1L
-	subwf	CCPR1L,W
-	btfss	_C
-	movlw	0x00	;min speed
-	movwf	CCPR1L
-MotorTest1_M1_End	movlb	0
-	movlw	TargetSpd	;adjust every 1/2 sec
-	movwf	Timer3Lo
-	return
-;M2
-MotorTest1_M2	bcf	M2SpdUpdated
-	btfsc	M2CurSpeed,7
-	bra	MotorTest1_M2Slow
-	movlw	TargetSpd	;speed to match
-	subwf	M2CurSpeed,W	;W=M1CurSpeed-10
-	SKPNZ
-	bra	MotorTest1_M2_End
-;less than 0 = too slow
-	btfsc	WREG,7	;Too slow?
-	bra	MotorTest1_M2Fast	; No
-MotorTest1_M2Slow	movlw	0x10
-	BANKSEL	CCPR2L
-	addwf	CCPR2L,W
-	btfsc	_C
-	movlw	0xFF	;Max speed
-	movwf	CCPR2L
-	bra	MotorTest1_M2_End
-;
-MotorTest1_M2Fast	movlw	0x08
-	BANKSEL	CCPR2L
-	subwf	CCPR2L,W
-	btfss	_C
-	movlw	0x00	;min speed
-	movwf	CCPR2L
-MotorTest1_M2_End	movlb	0
-	movlw	TargetSpd	;adjust every 1/2 sec
-	movwf	Timer4Lo
-	return
-;
-	endif
-;
-;=========================================================================================
 ; Entry: M1AvSpd, M2AvSpd
 ;
-TargetSpd	EQU	.8
+TargetSpd	EQU	.6
 ;
 MotorTest1	movlb	0	; bank 0
 ;
@@ -864,21 +775,21 @@ MotorTest1_M2_L1	movf	Param78,W
 	btfsc	Param78,7	;Too slow?
 	bra	MotorTest1_M2Fast	; No
 ;MotorTest1_M2Slow
-	BANKSEL	CCPR1L
+	BANKSEL	CCPR2L
 	movf	Param79,W
-	addwf	CCPR1L,W
+	addwf	CCPR2L,W
 	btfsc	_C
 	movlw	0xFF	;Max speed
-	movwf	CCPR1L
+	movwf	CCPR2L
 	bra	MotorTest1_End
 ;
 MotorTest1_M2Fast:
-	BANKSEL	CCPR1L
+	BANKSEL	CCPR2L
 	movf	Param79,W
-	addwf	CCPR1L,W
+	addwf	CCPR2L,W
 	btfss	_C
 	movlw	0x00	;min speed
-	movwf	CCPR1L
+	movwf	CCPR2L
 	bra	MotorTest1_End
 ;
 ;=========================================================================================
@@ -998,15 +909,12 @@ I2C_BufferData_L1	LOADFSR1	RegData,Param79
 ;
 ReadEncorders:
 	movlb	0
-;Stalled?
-	btfsc	M1Ticks,7	;ticks sence last motion
-	bsf	M1CurSpeed,7	;Stopped or dead slow >1.27s/count
 ;
-	movf	PORTB,W
-	movwf	Switches
 	movf	M1EncABCur,W
 	movwf	M1EncABPrev
 	clrf	M1EncABCur
+	movf	PORTB,W
+	movwf	Switches
 	btfsc	Switches,M1EncA
 	BSF	M1EncABCur,0	;A
 	btfsc	Switches,M1EncB
@@ -1019,23 +927,21 @@ ReadEncorders:
 	movwf	abCurr
 	movf	M1EncABPrev,W
 	movwf	abPrev
-	movlw	low Reg_M1Pos
-	movwf	FSR0L
-	movlw	high Reg_M1Pos
-	movwf	FSR0H
+	movlw                  Reg_M1Pos
+	LOADFSR0W              RegData
 	call	QuadCount
 ; Find speed
-	btfss	EncPhaseZero
-	bra	ReadEncorders_1
-	movf	M1Ticks,W	;ticks/count
-	clrf	M1Ticks
-	movwf	M1CurSpeed
-	bsf	M1SpdUpdated
+;	btfss	EncPhaseZero
+;	bra	ReadEncorders_1
+;	movf	M1Ticks,W	;ticks/count
+;	clrf	M1Ticks
+;	movwf	M1CurSpeed
+;	bsf	M1SpdUpdated
 ;
 ReadEncorders_1:
 ;Stalled?
-	btfsc	M2Ticks,7
-	bsf	M2CurSpeed,7	;Stopped or dead slow >1.27s/count
+;	btfsc	M2Ticks,7
+;	bsf	M2CurSpeed,7	;Stopped or dead slow >1.27s/count
 ;
 	movf	M2EncABCur,W
 	movwf	M2EncABPrev
@@ -1052,17 +958,15 @@ ReadEncorders_1:
 	movwf	abCurr
 	movf	M2EncABPrev,W
 	movwf	abPrev
-	movlw	low Reg_M2Pos
-	movwf	FSR0L
-	movlw	high Reg_M2Pos
-	movwf	FSR0H
+	movlw                  Reg_M2Pos
+	LOADFSR0W              RegData
 	call	QuadCount
-	btfss	EncPhaseZero
-	bra	ReadEncorders_2
-	movf	M2Ticks,W
-	clrf	M2Ticks
-	movwf	M2CurSpeed
-	bsf	M2SpdUpdated
+;	btfss	EncPhaseZero
+;	bra	ReadEncorders_2
+;	movf	M2Ticks,W
+;	clrf	M2Ticks
+;	movwf	M2CurSpeed
+;	bsf	M2SpdUpdated
 ;
 ReadEncorders_2	return
 ;
@@ -1140,4 +1044,97 @@ Q_Enc31	btfsc                  PositionIsLocked
 ;
 	END
 ;
+;
+	if oldCode
+; test both PWM outputs
+MotorTest	movlb	0	; bank 0
+	movf	Timer3Lo,F
+	SKPZ
+	return
+	movlw	.100
+	movwf	Timer3Lo
+	movlw	0x10
+	BANKSEL	CCPR1L
+	addwf	CCPR1L,F
+	addwf	CCPR2L,F
+	movlb	0	; bank 0
+	return
+;
+;=========================================================================================
+; test speed control to 10 counts per 1.28 seconds
+TargetSpd	EQU	.40
+MotorTest1	movlb	0	; bank 0
+	btfsc	M1SpdUpdated
+	call	MotorTest1_M1
+	btfsc	M2SpdUpdated
+	call	MotorTest1_M2
+;
+	movf	Timer3Lo,F
+	SKPNZ
+	call	MotorTest1_M1
+	movf	Timer4Lo,F
+	SKPNZ
+	call	MotorTest1_M2
+	return
+;M1
+MotorTest1_M1	bcf	M1SpdUpdated
+	btfsc	M1CurSpeed,7
+	bra	MotorTest1_M1Slow
+;
+	movlw	TargetSpd	;speed to match
+	subwf	M1CurSpeed,W	;W=M1CurSpeed-40
+	SKPNZ
+	bra	MotorTest1_M1_End
+;less than 0 = too slow
+	btfsc	WREG,7	;Too slow?
+	bra	MotorTest1_M1Fast	; No
+MotorTest1_M1Slow	movlw	0x20
+	BANKSEL	CCPR1L
+	addwf	CCPR1L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR1L
+	bra	MotorTest1_M1_End
+;
+MotorTest1_M1Fast	movlw	0x08
+	BANKSEL	CCPR1L
+	subwf	CCPR1L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR1L
+MotorTest1_M1_End	movlb	0
+	movlw	TargetSpd	;adjust every 1/2 sec
+	movwf	Timer3Lo
+	return
+;M2
+MotorTest1_M2	bcf	M2SpdUpdated
+	btfsc	M2CurSpeed,7
+	bra	MotorTest1_M2Slow
+	movlw	TargetSpd	;speed to match
+	subwf	M2CurSpeed,W	;W=M1CurSpeed-10
+	SKPNZ
+	bra	MotorTest1_M2_End
+;less than 0 = too slow
+	btfsc	WREG,7	;Too slow?
+	bra	MotorTest1_M2Fast	; No
+MotorTest1_M2Slow	movlw	0x10
+	BANKSEL	CCPR2L
+	addwf	CCPR2L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR2L
+	bra	MotorTest1_M2_End
+;
+MotorTest1_M2Fast	movlw	0x08
+	BANKSEL	CCPR2L
+	subwf	CCPR2L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR2L
+MotorTest1_M2_End	movlb	0
+	movlw	TargetSpd	;adjust every 1/2 sec
+	movwf	Timer4Lo
+	return
+;
+	endif
 ;

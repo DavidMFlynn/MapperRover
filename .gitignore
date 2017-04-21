@@ -2,3 +2,7 @@
 /TrackUnit/Firmware/RoverDriver.X/build/default/
 /TrackUnit/Firmware/RoverDriver.X/dist/default/
 *.bbprojectsettings
+
+*.bbprojectsettings
+
+*.properties
