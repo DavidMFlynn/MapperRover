@@ -285,6 +285,8 @@ RegDataBytes	EQU	.14
 	PosM2T1
 	PosM2T2
 	PosM2T3
+	CmdPosM1:4
+	CmdPosM2:4
 	endc
 ;
 ;Write Enable bits
@@ -297,7 +299,7 @@ RWFlags2Def	EQU	b'00001111'
 	Reg_Rev
 	Reg_M1Pos:4
 	Reg_M2Pos:4
-	Reg_M1CmdSpeed
+	Reg_M1CmdSpeed		;SInt8, counts per kBaseTimeUnit*kBTUPerA
 	Reg_M2CmdSpeed
 	Reg_M1Torque
 	Reg_M2Torque
@@ -675,12 +677,51 @@ CalcSpeed:
 ;
                        bcf                    PositionIsLocked
 ;
+;update calculated position
+	movf	SpeedIndex,F
+	SKPZ
+	bra	UCP_End
+;CmdPosM1 = CmdPosM1 + Reg_M1CmdSpeed
+	movlw                  Reg_M1CmdSpeed
+                       LOADFSR1W              RegData
+                       movf	INDF1,W
+                       movwf	Param78
+                       LOADFSR1A	CmdPosM1
+                       call	CalcCmdPos
+;CmdPosM2 = CmdPosM2 + Reg_M2CmdSpeed
+	movlw                  Reg_M2CmdSpeed
+                       LOADFSR1W              RegData
+                       movf	INDF1,W
+                       movwf	Param78
+                       LOADFSR1A	CmdPosM2
+                       call	CalcCmdPos
+;
+UCP_End:
+;
 ;Next
                        incf                   SpeedIndex,F
                        movlw                  kBTUPerAMask
                        andwf                  SpeedIndex,F
 ;
                        return
+;(FSR1)=(FSR1)+Param78
+CalcCmdPos             movf	Param78,W
+                       addwf	INDF1,F
+                       incf	FSR1L,F
+                       movlw	0x00
+                       btfsc	Param78,7
+                       movlw	0xFF	;sign extend the SInt8
+                       movwf	Param78
+;
+                       movlw	0x03
+                       movwf	Param79
+UCP_L1                 movf	Param78,W
+                       addwfc	INDF1,F
+                       incf	FSR1L,F
+                       decfsz	Param79,F
+                       bra	UCP_L1
+                       return
+;
 ;=========================================================================================
 ; ADC Routine
 ;=========================================================================================
