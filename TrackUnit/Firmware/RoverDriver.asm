@@ -285,8 +285,10 @@ RegDataBytes	EQU	.14
 	PosM2T1
 	PosM2T2
 	PosM2T3
-	CmdPosM1:4
+	CmdPosM1:4		;SInt32
 	CmdPosM2:4
+	PosErrM1:2		;SInt16
+	PosErrM2:2
 	endc
 ;
 ;Write Enable bits
@@ -637,6 +639,7 @@ MainLoop	CLRWDT
                        movlw                  kBaseTimeUnit
                        movwf                  Timer2Lo
                        call                   CalcSpeed
+                       call	CalcPosError
                        call	MotorTest1
 ;
 MainLoop_1:
@@ -648,12 +651,71 @@ MainLoop_1:
 ;
 	goto	MainLoop
 ;
+;=========================================================================================
+; PosErrMn=CmdPosMn-Reg_MnPos
 ;
+; Entry: CmdPosMn, Reg_MnPos
+; Exit: PosErrMn
+;
+CalcPosError	movlb	2
+;
+	movlw                  Reg_M1Pos
+                       LOADFSR1W              RegData
+                       LOADFSR0A	CmdPosM1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	PosErrM1
+;
+                       addfsr	FSR0,1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	PosErrM1+1
+;
+	addfsr	FSR0,1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	Param76
+;
+                       addfsr	FSR0,1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	Param77
+;
+; fix overflow?
+;
+	movlw                  Reg_M2Pos
+                       LOADFSR1W              RegData
+                       LOADFSR0A	CmdPosM2
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	PosErrM2
+;
+                       addfsr	FSR0,1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	PosErrM2+1
+;
+	addfsr	FSR0,1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	Param76
+;
+                       addfsr	FSR0,1
+                       moviw	FSR1++
+                       subwf	INDF0,W
+                       movwf	Param77
+;
+; fix overflow?
+;
+	movlb	0
+	return
+;
+;=========================================================================================
 ;=========================================================================================
 ; Calculate Speed
 ;  Integrate Position
 ; Entry: Bank0
-; Exit: M1AvSpd,M2AvSpd,SpeedIndex++
+; Exit: MnAvSpd,SpeedIndex++,CmdPosMn
 ;=========================================================================================
 CalcSpeed:
                        LOADFSR0               PosM1T0,SpeedIndex     ;old position
