@@ -288,7 +288,7 @@ RegDataBytes	EQU	.14
 	CmdPosM1:4		;SInt32
 	CmdPosM2:4
 	PosErrM1:2		;SInt16
-	PosErrM2:2
+	PosErrM2:2                                    ;+ = forward
 	endc
 ;
 ;Write Enable bits
@@ -653,6 +653,7 @@ MainLoop_1:
 ;
 ;=========================================================================================
 ; PosErrMn=CmdPosMn-Reg_MnPos
+; A positive result = go faster forward
 ;
 ; Entry: CmdPosMn, Reg_MnPos
 ; Exit: PosErrMn
@@ -812,23 +813,26 @@ ADC_End	movlb	0
 ;=========================================================================================
 ; Motor test routines
 ;=========================================================================================
-; Entry: M1AvSpd, M2AvSpd
+; Entry: PosErrM1, PosErrM2
 ;
-TargetSpd	EQU	.6
 ;
-MotorTest1	movlb	0	; bank 0
-;
-	call	MotorTest1_M1
-	call	MotorTest1_M2
+MotorTest1	call	MotorTest1_M1
+;	call	MotorTest1_M2
+	movlb                  0
 	return
 ;M1
-MotorTest1_M1	movlw	TargetSpd	;speed to match
-	movwf	Param78
-	movf	M1AvSpd,W
-	subwf	Param78,F	;Param78=TargetSpd-M1AvSpd
-	SKPNZ
-	return
-	clrf	Param79
+MotorTest1_M1	movlb                  2
+                       clrf                   Param79
+                       btfsc                  PosErrM1+1,7
+	bra                    MotorTest1_M1_1
+	comf                   Param79,F
+	movf                   PosErrM1+1,F
+	SKPZ
+	bra                    MotorTest1_M1_1
+	movf                   PosErrM1,W
+	movwf                  Param79
+	bra                    MotorTest1_M1_1
+;	
 	movlw	kGain
 	movwf	Param7A
 ;
@@ -837,26 +841,11 @@ MotorTest1_M1_L1	movf	Param78,W
 	decfsz	Param7A,F
 	bra	MotorTest1_M1_L1
 ;
-;Param78=Error, less than 0 = too fast
-	btfsc	Param78,7	;Too slow?
-	bra	MotorTest1_M1Fast	; No
-;MotorTest1_M1Slow
-	BANKSEL	CCPR1L
-	movf	Param79,W
-	addwf	CCPR1L,W
-	btfsc	_C
-	movlw	0xFF	;Max speed
-	movwf	CCPR1L
-	bra	MotorTest1_End
 ;
-MotorTest1_M1Fast:
+MotorTest1_M1_1:
 	BANKSEL	CCPR1L
 	movf	Param79,W
-	addwf	CCPR1L,W
-	btfss	_C
-	movlw	0x00	;min speed
 	movwf	CCPR1L
-MotorTest1_End	movlb	0
 	return
 ;M2
 MotorTest1_M2	movlw	TargetSpd	;speed to match
@@ -880,20 +869,9 @@ MotorTest1_M2_L1	movf	Param78,W
 ;MotorTest1_M2Slow
 	BANKSEL	CCPR2L
 	movf	Param79,W
-	addwf	CCPR2L,W
-	btfsc	_C
-	movlw	0xFF	;Max speed
 	movwf	CCPR2L
 	bra	MotorTest1_End
 ;
-MotorTest1_M2Fast:
-	BANKSEL	CCPR2L
-	movf	Param79,W
-	addwf	CCPR2L,W
-	btfss	_C
-	movlw	0x00	;min speed
-	movwf	CCPR2L
-	bra	MotorTest1_End
 ;
 ;=========================================================================================
 ; I2C Data Handlers
@@ -1238,6 +1216,89 @@ MotorTest1_M2_End	movlb	0
 	movlw	TargetSpd	;adjust every 1/2 sec
 	movwf	Timer4Lo
 	return
+;
+; Entry: M1AvSpd, M2AvSpd
+;
+TargetSpd	EQU	.6
+;
+MotorTest1	movlb	0	; bank 0
+;
+	call	MotorTest1_M1
+	call	MotorTest1_M2
+	return
+;M1
+MotorTest1_M1	movlw	TargetSpd	;speed to match
+	movwf	Param78
+	movf	M1AvSpd,W
+	subwf	Param78,F	;Param78=TargetSpd-M1AvSpd
+	SKPNZ
+	return
+	clrf	Param79
+	movlw	kGain
+	movwf	Param7A
+;
+MotorTest1_M1_L1	movf	Param78,W
+	addwf	Param79,F
+	decfsz	Param7A,F
+	bra	MotorTest1_M1_L1
+;
+;Param78=Error, less than 0 = too fast
+	btfsc	Param78,7	;Too slow?
+	bra	MotorTest1_M1Fast	; No
+;MotorTest1_M1Slow
+	BANKSEL	CCPR1L
+	movf	Param79,W
+	addwf	CCPR1L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR1L
+	bra	MotorTest1_End
+;
+MotorTest1_M1Fast:
+	BANKSEL	CCPR1L
+	movf	Param79,W
+	addwf	CCPR1L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR1L
+MotorTest1_End	movlb	0
+	return
+;M2
+MotorTest1_M2	movlw	TargetSpd	;speed to match
+	movwf	Param78
+	movf	M2AvSpd,W
+	subwf	Param78,F	;Param78=TargetSpd-M2AvSpd
+	SKPNZ
+	return
+	clrf	Param79
+	movlw	kGain
+	movwf	Param7A
+;
+MotorTest1_M2_L1	movf	Param78,W
+	addwf	Param79,F
+	decfsz	Param7A,F
+	bra	MotorTest1_M2_L1
+;
+;Param78=Error, less than 0 = too fast
+	btfsc	Param78,7	;Too slow?
+	bra	MotorTest1_M2Fast	; No
+;MotorTest1_M2Slow
+	BANKSEL	CCPR2L
+	movf	Param79,W
+	addwf	CCPR2L,W
+	btfsc	_C
+	movlw	0xFF	;Max speed
+	movwf	CCPR2L
+	bra	MotorTest1_End
+;
+MotorTest1_M2Fast:
+	BANKSEL	CCPR2L
+	movf	Param79,W
+	addwf	CCPR2L,W
+	btfss	_C
+	movlw	0x00	;min speed
+	movwf	CCPR2L
+	bra	MotorTest1_End
 ;
 	endif
 ;
